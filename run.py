@@ -65,6 +65,7 @@ def run_epoch(model, loader, device, optimizer=None, config=None):
     accumulation = schedule['gradient_accumulation']
     model.train(training)
     meter, predictions, references = AverageMeter(), [], []
+    window_examples = 0
     if training:
         optimizer.zero_grad(set_to_none=True)
     for step, item in enumerate(loader):
@@ -89,16 +90,17 @@ def run_epoch(model, loader, device, optimizer=None, config=None):
             if training:
                 if loss is None:
                     raise ValueError('Training examples must contain supervised labels')
-                window_size = min(
-                    accumulation, len(loader) - (step // accumulation) * accumulation
-                )
-                (loss / window_size).backward()
+                (loss * len(labels)).backward()
+                window_examples += len(labels)
         if training and ((step + 1) % accumulation == 0 or step + 1 == len(loader)):
-            torch.nn.utils.clip_grad_norm_(
-                (p for p in model.parameters() if p.requires_grad), 1.0
-            )
+            parameters = [p for p in model.parameters() if p.requires_grad]
+            for parameter in parameters:
+                if parameter.grad is not None:
+                    parameter.grad.div_(window_examples)
+            torch.nn.utils.clip_grad_norm_(parameters, 1.0)
             optimizer.step()
             optimizer.zero_grad(set_to_none=True)
+            window_examples = 0
         estimate = logits.detach().flatten() if task == 'stsb' else logits.detach().argmax(-1)
         predictions.extend(
             estimate.float().cpu().tolist() if task == 'stsb' else estimate.cpu().tolist()

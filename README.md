@@ -108,6 +108,8 @@ python run.py train --config experiments/roberta-base/mrpc/ratio_0p0016-alpha_15
 
 Dotted overrides change individual settings. For example, `--opts train.batch_size 8 train.gradient_accumulation 4` keeps an effective batch of 32. `train.learning_rate` controls Fourier coefficients. `train.head_learning_rate` controls the task head. Learning rates remain constant over the configured epoch schedule.
 
+Gradient accumulation averages over the actual number of examples in each update, including a shorter final microbatch, before gradient clipping.
+
 Each run writes `history.jsonl`, measured metrics, and `last/` and `best/` adapter directories. Each directory contains sparse coefficients and support indices, the complete task head, the pinned base-model identity, saved preprocessing, and optimizer/random state. Resume with a larger total epoch count:
 
 ```bash
@@ -164,6 +166,8 @@ A merged export is a standard Transformers model directory containing the adapte
 `lfma/core.py` defines pinned backbones and constructs pretrained models. The adjacent `spectrum.py` analyzes learned supports, and `adaptation/layers.py` and `adaptation/injection.py` implement sparse Fourier updates, projection replacement, and merging. `lfma/data` keeps dataset streams with manifest preparation. `lfma/artifacts` groups storage, structural validation, and portable bundles. `lfma/experiments` contains protocol selection, resumable plans, and repeated-seed comparisons. `run.py` exposes these operations as subcommands. See [module and checkpoint layout](docs/implementation.md) for the data flow.
 
 The adapter API accepts exact `nn.Linear` names and optional spatial update probes. Weights use PyTorch's `[out, in]` layout and default backward-normalized FFTs. `k = floor(out * in * ratio)` and each coefficient costs two real trainable scalars. Merging folds the learned update into each frozen projection.
+
+For example, the ViT-B count of 2,112 in paper Section 4.3 at ratio 0.0003 counts complex coefficients. Those coefficients occupy 4,224 real trainable scalars; the task classifier is counted separately.
 
 ## 7. Portable datasets, experiment plans, and adapter analysis
 
